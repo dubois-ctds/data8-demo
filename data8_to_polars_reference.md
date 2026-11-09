@@ -146,15 +146,15 @@ df = df.with_columns(
 )
 ```
 
-`with_columns` adds columns to a frame that already has rows. See [example](#example-with-columns).
+`with_columns` adds columns to a frame that already has rows. See [example](#example-adding-columns-with-plcol).
 
 | Data 8 | Polars Equivalent | Description | Polars input | Polars output | Notes | Example |
 | --- | --- | --- | --- | --- | --- | --- |
 | `Table()` | `pl.DataFrame()` | Empty DataFrame. | `data`, `schema`, `schema_overrides`, `strict=True`, `orient` — [API](https://docs.pola.rs/api/python/stable/reference/dataframe/) | `DataFrame` | To start from columns, pass Series: `pl.DataFrame([pl.Series("a", [1]), ...])`. | |
 | `Table().read_table(filename)` | `pl.read_csv(filename)` or `pl.read_parquet(filename)` | DataFrame from a file. Pick the reader that matches the file type. | [I/O reference](https://docs.pola.rs/api/python/stable/reference/io.html) | `DataFrame` | `pl.scan_csv` returns a LazyFrame; the same `pl.col` expressions apply. A file that separates rows with carriage returns needs `eol_char='\r'`. A carriage return is the character `\r`. Most files end each row with a line feed `\n`, or with both (`\r\n`). `movies_by_year.csv`, `minard.csv`, `educ_inc.csv`, and `family_heights.csv` end each row with `\r` only. | |
-| `tbl.with_column(name, values)` | `df.with_columns(pl.Series(name, values))` or `df.with_columns(expr.alias(name))` | A DataFrame with an additional or replaced column. | `*exprs`, `**named_exprs` | `DataFrame` | Computed columns use `pl.col`. A constant uses `pl.lit(x).alias(name)`. | [example](#example-with-columns) |
-| `tbl.with_columns(n1, v1, n2, v2, ...)` | `pl.DataFrame([pl.Series(n1, v1), pl.Series(n2, v2)])` or several expressions in one `with_columns` | Several columns in one call. | Series list, or `df.with_columns(*exprs, **named_exprs)` | `DataFrame` | Name every Series. | [example](#example-with-columns) |
-| `tbl.column(col)` | `df.get_column("col")` | The column as a Polars Series. | `name`: string | `Series` | Inside `filter` / `with_columns` / `group_by`, write `pl.col("col")` and keep it lazy. One element: `.item(0)`. | [example](#example-lecture-row) |
+| `tbl.with_column(name, values)` | `df.with_columns(pl.Series(name, values))` or `df.with_columns(expr.alias(name))` | A DataFrame with an additional or replaced column. | `*exprs`, `**named_exprs` | `DataFrame` | Computed columns use `pl.col`. A constant uses `pl.lit(x).alias(name)`. | [example](#example-adding-columns-with-plcol) |
+| `tbl.with_columns(n1, v1, n2, v2, ...)` | `pl.DataFrame([pl.Series(n1, v1), pl.Series(n2, v2)])` or several expressions in one `with_columns` | Several columns in one call. | Series list, or `df.with_columns(*exprs, **named_exprs)` | `DataFrame` | Name every Series. | [example](#example-adding-columns-with-plcol) |
+| `tbl.column(col)` | `df.get_column("col")` | The column as a Polars Series. | `name`: string | `Series` | Inside `filter` / `with_columns` / `group_by`, write `pl.col("col")` and keep it lazy. One element: `.item(0)`. | [example](#example-get_column) |
 | `tbl.column(index)` | `df.to_series(index)` | The column at that position as a Series. Positions start at 0. | `index`: int | `Series` | `to_series(1)` is the second column. By name, use `get_column`. | |
 | `tbl.num_rows` | `df.height` or `len(df)` | Number of rows. | attribute | `int` | Inside an expression: `pl.len()`. | |
 | `tbl.num_columns` | `df.width` or `len(df.columns)` | Number of columns. | attribute | `int` | Also `df.shape[1]`. | |
@@ -162,7 +162,7 @@ df = df.with_columns(
 | `tbl.select(col1, col2, ...)` | `df.select("col1", "col2", ...)` | Copy with only some columns. Arguments may be names or `pl.col` expressions. | `*exprs`, `**named_exprs` | `DataFrame` | Select numeric columns before `GroupBy.sum()` when other columns are strings. | [example](#example-select) |
 | `tbl.drop(col1, col2, ...)` | `df.drop("col1", "col2", ...)` | Copy without those columns. | `*columns`, `strict` | `DataFrame` | Original frame stays unless you reassign. | |
 | `tbl.drop(...)` returning the column | `df.drop_in_place("col")` | Removes the column in place and returns it as a Series. | column name | `Series` | Mutates `df`. | |
-| `tbl.relabeled(old_label, new_label)` | `df.rename({old_label: new_label})` | New DataFrame with one or more columns renamed. | `mapping` or a function of the name; `strict` | `DataFrame` | Original is unchanged. After a group reduction, `.rename` is how you label `total_score`. | [example](#example-rename) |
+| `tbl.relabeled(old_label, new_label)` | `df.rename({old_label: new_label})` | New DataFrame with one or more columns renamed. | `mapping` or a function of the name; `strict` | `DataFrame` | Original is unchanged. After a group reduction, `.rename` is how you label `total_score`. | [example](#example-dfrename) |
 | `tbl.relabeled(column_index, new_label)` | `df.rename({df.columns[column_index]: new_label})` | Rename the column at that position. Positions start at 0. | index into `df.columns` | `DataFrame` | `relabeled(3, "SALARY")` renames column 3. In `nba_salaries.csv` that column is `"'15-'16 SALARY"`, so `rename({"'15-'16 SALARY": "SALARY"})` is the same rename. | |
 | `tbl.show(n)` | `df.show(n)` | Prints the first `n` rows. Data 8 `show(n)` displays those rows. The textbook notebooks use `.show(n)` for every cell that only displays rows. | `limit`: int or `None` | `None` | Data 8 `show()` with no argument displays the first 10 rows. A Polars display shows the first five and the last five. `show` prints and returns `None`, so nothing can be chained after it. Cells like `nba_salaries.sort("PLAYER").show(5)` end the chain with `show`. | |
 | rows that feed a later step | `df.head(n)` | First `n` rows as a DataFrame. Use it only when the result is used again, because it is not a display call. | `n` | `DataFrame` | Notebook examples: `histogram_elements.head(num_bins).with_columns(...)` and `movies_and_years.group_by('Year').len(name='count').sort('Year').head(10).with_columns(...).hvplot.barh(...)`. Both continue the chain, so `.show` would break them. Also `df.limit(n)`. | |
@@ -172,7 +172,7 @@ df = df.with_columns(
 | `tbl.sort(column_name)` | `df.sort("column_name")` | Copy sorted by a column, ascending. | `by`, `*more_by`, `descending=False`, `nulls_last`, `maintain_order` | `DataFrame` | Sort key can be `pl.col("column_name")`. `by` may be positional or named: `df.sort("SALARY")` and `df.sort(by="SALARY")` match. | |
 | `tbl.sort(column_index)` | `df.sort(pl.nth(column_index))` | Copy sorted by the column at that position, ascending. Positions start at 0. | `pl.nth(index)` as `by` | `DataFrame` | `nba_salaries.sort(pl.nth(0)).show(5)` sorts by the first column and shows five rows. If column 0 is `"PLAYER"`, this matches `df.sort("PLAYER").show(5)`. | |
 | `tbl.sort(column_name, descending=True)` | `df.sort("column_name", descending=True)` | Copy sorted descending. | `descending` is named | `DataFrame` | Pass `descending` by name. A second positional argument is another column to sort by, not `descending`: `df.sort("SALARY", True)` does not sort descending. `df.sort(by="SALARY", descending=True)` is the same call as `df.sort("SALARY", descending=True)`. | |
-| `tbl.where(column, predicate)` | `df.filter(pl.col("column") <op> value)` | Copy with only the rows that match. Combine comparisons with `&` (and) or a vertical bar (or), and wrap each comparison in parentheses. | boolean Expr from `pl.col` | `DataFrame` | The notebook writes `df.filter(pl.col("Price") > 5)`. | [example](#example-filter) |
+| `tbl.where(column, predicate)` | `df.filter(pl.col("column") <op> value)` | Copy with only the rows that match. Combine comparisons with `&` (and) or a vertical bar (or), and wrap each comparison in parentheses. | boolean Expr from `pl.col` | `DataFrame` | The notebook writes `df.filter(pl.col("Price") > 5)`. | [example](#example-filter-with-plcol) |
 | rows that fail the predicate | `df.filter(~(pl.col("column") <op> value))` | Copy with the matching rows removed. | boolean Expr | `DataFrame` | See [Table.where Predicates](#tablewhere-predicates). | |
 | `tbl.take(np.arange(k))` / `tbl.take(0)` | `df.head(k)` / `df.head(1)` | `take` of the first rows is `head`. | `n` | `DataFrame` | The index list `np.arange(k)` is the first `k` rows. If the cell only displays them, it ends with `.show(k)` instead. See [Table.take: head, tail, or gather](#tabletake-head-tail-or-gather). | |
 | `tbl.take(np.arange(num_rows - k, num_rows))` | `df.tail(k)` | `take` of the last rows is `tail`. | `n` | `DataFrame` | The index list ends at the last row. See [Table.take: head, tail, or gather](#tabletake-head-tail-or-gather). | |
@@ -181,16 +181,16 @@ df = df.with_columns(
 | `tbl.sample(k, with_replacement=False)` | `df.sample(n=k, with_replacement=False)` | `k` distinct rows. | `n`; `with_replacement=False` | `DataFrame` | Both sides draw without replacement. Polars still needs `n`: omitting it draws one row. | |
 | `tbl.sample()` / `tbl.sample(with_replacement=False)` | `df.sample(n=df.height, with_replacement=False, shuffle=True)` | A shuffle of every row. | `n=df.height`; `with_replacement=False`; `shuffle=True` | `DataFrame` | Data 8 with no `k` permutes the whole table. Polars with no `n` returns one row, so the call passes `n=df.height`. `DataFrame` has no `.shuffle()`. | |
 | `tbl.sample(with_replacement=False).column(col)` | `pl.col("col").shuffle()` | Random permutation of one column. Every value is kept once. | optional `seed` | `Expr` or `Series` | Chapter 12 label shuffles: `select(pl.col("Maternal Smoker").shuffle()).to_series(0)`, or `with_columns(pl.col("Group").shuffle().alias("Shuffled Label"))`. `s.shuffle()` is the Series form. `DataFrame` has no `.shuffle()`. | |
-| `tbl.bin(column)` / `tbl.bin(column, bins)` | `df.get_column(col).hist(bin_count=10)` or `hist(bins=edges)` | Counts of values in each interval. Default is 10 equal-width bins from min to max. | `bin_count` or `bins` | `DataFrame` with breakpoint, category, and count | To label bins and then count them: `bin_intervals` plus `GroupBy.len()`. `Series.cut` is deprecated. | [example](#example-hist-bin) |
-| `tbl.apply(function)` / `tbl.apply(function, col1, col2, ...)` | `df.with_columns(pl.col("col").map_elements(function, return_dtype=...).alias("Name"))` | Applies a Python function to each element. Slower than a native expression. | `function`, `return_dtype` | Expr | Prefer `pl.col("a") * 2` when a native expression exists. Several columns: `pl.struct(["a", "b"]).map_elements(...)`. | [example](#example-map-elements) |
-| `tbl.group(column_or_columns)` | `df.group_by(pl.col("col")).len()` | One row per distinct value. The default Data 8 summary is a count. | `pl.col` or a list of columns; optional `maintain_order=True` | `DataFrame` | `len(name="count")` names the count column. | [example](#example-groupby) |
-| `tbl.group(column_or_columns, function)` | `df.group_by(pl.col("col")).max()` and the other GroupBy methods | Reduce the other columns with a [GroupBy method](#groupby-methods). | group key, then `.sum()`, `.mean()`, `.max()`, `.min()`, `.median()`, `.quantile()`, `.first()`, `.last()`, `.n_unique()`, `.head()`, `.tail()`, `.all()`, `.having()`, or `.map_groups()` | `DataFrame` | Select columns before `.sum()` or `.mean()` when a string column is present. `.max()` can run on strings. | [example](#example-groupby) |
-| `tbl.pivot(col1, col2)` | `df.pivot(col1, index=col2, aggregate_function="len")` | Pivot: each value of `col1` becomes a column, each value of `col2` becomes a row. Cells are counts. | `on` (positional), `index`, `values`, `aggregate_function` (`"min"`, `"max"`, `"first"`, `"last"`, `"sum"`, `"mean"`, `"median"`, `"len"`) | `DataFrame` | The first argument is `on` (formerly `columns`). | [example](#example-groupby) |
-| `tbl.pivot(col1, col2, values, collect)` | `df.pivot(col1, index=col2, values=values, aggregate_function=collect)` | Same pivot, aggregating a third column. | `aggregate_function="max"`, `"sum"`, `"mean"`, and the other names above | `DataFrame` | Notebook: `df.pivot("Flavor", index="Color", values="Price", aggregate_function="max")`. | [example](#example-groupby) |
+| `tbl.bin(column)` / `tbl.bin(column, bins)` | `df.get_column(col).hist(bin_count=10)` or `hist(bins=edges)` | Counts of values in each interval. Default is 10 equal-width bins from min to max. | `bin_count` or `bins` | `DataFrame` with breakpoint, category, and count | To label bins and then count them: `bin_intervals` plus `GroupBy.len()`. `Series.cut` is deprecated. | [example](#example-histogram-and-bins) |
+| `tbl.apply(function)` / `tbl.apply(function, col1, col2, ...)` | `df.with_columns(pl.col("col").map_elements(function, return_dtype=...).alias("Name"))` | Applies a Python function to each element. Slower than a native expression. | `function`, `return_dtype` | Expr | Prefer `pl.col("a") * 2` when a native expression exists. Several columns: `pl.struct(["a", "b"]).map_elements(...)`. | [example](#example-map_elements) |
+| `tbl.group(column_or_columns)` | `df.group_by(pl.col("col")).len()` | One row per distinct value. The default Data 8 summary is a count. | `pl.col` or a list of columns; optional `maintain_order=True` | `DataFrame` | `len(name="count")` names the count column. | [example](#example-group_by-methods) |
+| `tbl.group(column_or_columns, function)` | `df.group_by(pl.col("col")).max()` and the other GroupBy methods | Reduce the other columns with a [GroupBy method](#groupby-methods). | group key, then `.sum()`, `.mean()`, `.max()`, `.min()`, `.median()`, `.quantile()`, `.first()`, `.last()`, `.n_unique()`, `.head()`, `.tail()`, `.all()`, `.having()`, or `.map_groups()` | `DataFrame` | Select columns before `.sum()` or `.mean()` when a string column is present. `.max()` can run on strings. | [example](#example-group_by-methods) |
+| `tbl.pivot(col1, col2)` | `df.pivot(col1, index=col2, aggregate_function="len")` | Pivot: each value of `col1` becomes a column, each value of `col2` becomes a row. Cells are counts. | `on` (positional), `index`, `values`, `aggregate_function` (`"min"`, `"max"`, `"first"`, `"last"`, `"sum"`, `"mean"`, `"median"`, `"len"`) | `DataFrame` | The first argument is `on` (formerly `columns`). | [example](#example-group_by-methods) |
+| `tbl.pivot(col1, col2, values, collect)` | `df.pivot(col1, index=col2, values=values, aggregate_function=collect)` | Same pivot, aggregating a third column. | `aggregate_function="max"`, `"sum"`, `"mean"`, and the other names above | `DataFrame` | Notebook: `df.pivot("Flavor", index="Color", values="Price", aggregate_function="max")`. | [example](#example-group_by-methods) |
 | `tblA.join(colA, tblB)` / `tblA.join(colA, tblB, colB)` | `dfA.join(dfB, on="colA")` or `dfA.join(dfB, left_on="colA", right_on="colB")` | Rows whose key appears in both frames, with columns from both. | `on` or `left_on`/`right_on`; `how` (`inner`, `left`, `right`, `full`, `semi`, `anti`, `cross`) | `DataFrame` | Default `how` is inner. | |
-| `tbl.with_row(values)` | `pl.concat([df, pl.DataFrame([dict(zip(df.columns, values))])])` or `df.extend(other)` | Adds one row. Match column names and types. | a one-row DataFrame | `DataFrame` | `extend` modifies in place. `concat` returns a new frame. | [example](#example-extend) |
-| `tbl.with_rows(list_of_rows)` | `df.extend(pl.from_dicts(list_of_rows))` or `pl.concat([df, other])` | Adds many rows. | DataFrame with the same schema | `DataFrame` | `pl.from_dicts` builds the extra rows from a list of dicts. | [example](#example-extend) |
-| `tbl.row(row_index)` | `df.row(row_index, named=True)` | One row as a dict, or a tuple when `named=False`. | `index`; `named` | `dict` or `tuple` | A single cell from a filtered frame: `df.filter(...).get_column("col").item(0)`. | [example](#example-lecture-row) |
+| `tbl.with_row(values)` | `pl.concat([df, pl.DataFrame([dict(zip(df.columns, values))])])` or `df.extend(other)` | Adds one row. Match column names and types. | a one-row DataFrame | `DataFrame` | `extend` modifies in place. `concat` returns a new frame. | [example](#example-dataframeextend-adding-rows) |
+| `tbl.with_rows(list_of_rows)` | `df.extend(pl.from_dicts(list_of_rows))` or `pl.concat([df, other])` | Adds many rows. | DataFrame with the same schema | `DataFrame` | `pl.from_dicts` builds the extra rows from a list of dicts. | [example](#example-dataframeextend-adding-rows) |
+| `tbl.row(row_index)` | `df.row(row_index, named=True)` | One row as a dict, or a tuple when `named=False`. | `index`; `named` | `dict` or `tuple` | A single cell from a filtered frame: `df.filter(...).get_column("col").item(0)`. | [example](#example-one-value-from-a-filtered-row) |
 
 ### Table.take: head, tail, or gather
 
@@ -550,6 +550,70 @@ shape: (2, 3)
 └─────┴─────┴─────┘
 ```
 
+### Example: `get_column`
+
+`df.get_column("col")` is Data 8 `tbl.column(col)`: the whole column as a Polars Series. One element is `.item(0)`. Inside `filter`, `with_columns`, and `group_by`, write `pl.col("col")` and keep it lazy.
+
+```python
+import polars as pl
+
+df = pl.DataFrame([
+    pl.Series("Flavor", ["strawberry", "chocolate", "chocolate"]),
+    pl.Series("Price", [3.55, 4.75, 5.25]),
+])
+
+print(df.get_column("Price"))
+print(df.get_column("Price").item(0))
+print(df.filter(pl.col("Price") > 4))
+print(df.with_columns((pl.col("Price") * 2).alias("double")))
+print(df.group_by(pl.col("Flavor"), maintain_order=True).len())
+print(df.filter(pl.col("Flavor") == "strawberry").get_column("Price").item(0))
+```
+
+Output:
+
+```text
+shape: (3,)
+Series: 'Price' [f64]
+[
+	3.55
+	4.75
+	5.25
+]
+3.55
+shape: (2, 2)
+┌───────────┬───────┐
+│ Flavor    ┆ Price │
+│ ---       ┆ ---   │
+│ str       ┆ f64   │
+╞═══════════╪═══════╡
+│ chocolate ┆ 4.75  │
+│ chocolate ┆ 5.25  │
+└───────────┴───────┘
+shape: (3, 3)
+┌────────────┬───────┬────────┐
+│ Flavor     ┆ Price ┆ double │
+│ ---        ┆ ---   ┆ ---    │
+│ str        ┆ f64   ┆ f64    │
+╞════════════╪═══════╪════════╡
+│ strawberry ┆ 3.55  ┆ 7.1    │
+│ chocolate  ┆ 4.75  ┆ 9.5    │
+│ chocolate  ┆ 5.25  ┆ 10.5   │
+└────────────┴───────┴────────┘
+shape: (2, 2)
+┌────────────┬─────┐
+│ Flavor     ┆ len │
+│ ---        ┆ --- │
+│ str        ┆ u32 │
+╞════════════╪═════╡
+│ strawberry ┆ 1   │
+│ chocolate  ┆ 2   │
+└────────────┴─────┘
+3.55
+```
+
+`get_column("Price")` is the Series. `.item(0)` is the first element, `3.55`. `filter(pl.col("Price") > 4)` keeps the two chocolate rows. `with_columns` adds `double`. `group_by(pl.col("Flavor"))` counts 1 strawberry and 2 chocolate. After a filter, `.get_column("Price").item(0)` is the strawberry price, `3.55`.
+
 ### Example: `.select`
 
 ```python
@@ -682,7 +746,7 @@ print(
 
 Sums: Comedy 207 and 280.0; Drama 179 and 270.0. Means: Comedy 69.0 and about 93.33; Drama 89.5 and 135.0.
 
-### Example: histogram / bins
+### Example: histogram and bins
 
 `get_column(...).hist(bin_count=10)` is the count table for `tbl.bin` (10 equal-width bins). `pl.col(...).hist(bins=...)` inside `select` returns one count per bin. `bin_intervals` plus `GroupBy.len()` is the form that uses a GroupBy method.
 
@@ -720,7 +784,7 @@ print(df2)
 
 Polars warns that `map_elements` is slower than `pl.col("a") * 2`. The column `a_times_2` is 2, 4, 6.
 
-### Example: `DataFrame.extend` / adding rows
+### Example: `DataFrame.extend` adding rows
 
 ```python
 import polars as pl
