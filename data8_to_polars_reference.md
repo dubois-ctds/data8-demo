@@ -7,6 +7,7 @@ Mapping of [Data 8 Python Reference](https://data8.org/datascience/reference-nb/
 - `df` is a Polars DataFrame. `s` is a **Polars Series**, created as `pl.Series("name", values)`. A Pandas Series appears only after `df.to_pandas()`.
 - Inside `filter`, `with_columns`, `select`, and `group_by`, refer to a column with the lazy expression `pl.col("name")`. The same expression works on a DataFrame and on `df.lazy()`.
 - **Array or Series?** A standalone array, one whose values are never added to a DataFrame, stays a **NumPy array** and uses NumPy functions: `make_array(1, 2)` → `np.array([1, 2])`, then `np.mean(arr)`, `np.append(arr, x)`, `np.count_nonzero(arr)`. An array that is added to a DataFrame is wrapped in a named Series, `pl.Series("name", arr)`, and from then on uses Series or `pl.col` methods. See [Arrays: standalone array or DataFrame column?](#arrays-standalone-array-or-dataframe-column).
+- **Building a DataFrame:** pass a list of named Series, `pl.DataFrame([pl.Series("a", [...]), pl.Series("b", [...])])`, and add a column with `df.with_columns(pl.Series("c", values))`. Do not build a DataFrame from a dictionary (`pl.DataFrame({"a": [...]})`).
 - Integer sequences and loops use `np.arange`, never Python `range`: `for i in np.arange(5000)`. A float grid also stays `np.arange`; do not replace it with `pl.linear_space`. Inside an expression, an index column can be `pl.int_range(0, pl.len())`.
 - Group reductions use a [GroupBy method](https://docs.pola.rs/api/python/stable/reference/dataframe/group_by.html) such as `.sum()` or `.max()`. See [GroupBy methods](#groupby-methods).
 
@@ -134,7 +135,7 @@ import polars as pl
 # Array -> Series
 x = pl.Series("x", [1, 2, 3])                      # from a list
 y = pl.Series("y", np.array([4.0, 5.0, 6.0]))      # from a NumPy array
-df = pl.DataFrame({"a": [1, 2], "b": [3, 4]})
+df = pl.DataFrame([pl.Series("a", [1, 2]), pl.Series("b", [3, 4])])
 r = pl.Series("row", df.row(0))                    # from a table row
 m = pl.Series("m", np.array([1.0, np.nan]), nan_to_null=True)
 
@@ -656,11 +657,11 @@ GroupBy methods keep the source column names. Rename afterward:
 ```python
 import polars as pl
 
-grouped = pl.DataFrame({
-    "g": ["x", "x", "y"],
-    "a": [1, 2, 3],
-    "b": [10, 20, 30],
-})
+grouped = pl.DataFrame([
+    pl.Series("g", ["x", "x", "y"]),
+    pl.Series("a", [1, 2, 3]),
+    pl.Series("b", [10, 20, 30]),
+])
 print(
     grouped.group_by(pl.col("g"), maintain_order=True)
     .sum()
@@ -885,11 +886,11 @@ Several numeric columns can be summed together, then renamed:
 ```python
 import polars as pl
 
-movies = pl.DataFrame({
-    "genre": ["Comedy", "Comedy", "Drama", "Drama", "Comedy"],
-    "score": [72, 65, 88, 91, 70],
-    "gross": [100.0, 85.0, 120.0, 150.0, 95.0],
-})
+movies = pl.DataFrame([
+    pl.Series("genre", ["Comedy", "Comedy", "Drama", "Drama", "Comedy"]),
+    pl.Series("score", [72, 65, 88, 91, 70]),
+    pl.Series("gross", [100.0, 85.0, 120.0, 150.0, 95.0]),
+])
 print(
     movies.group_by(pl.col("genre"), maintain_order=True)
     .sum()
