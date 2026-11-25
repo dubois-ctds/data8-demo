@@ -6,8 +6,10 @@ Mapping of [Data 8 Python Reference](https://data8.org/datascience/reference-nb/
 
 - `df` is a Polars DataFrame. `s` is a **Polars Series**, created as `pl.Series("name", values)`. A Pandas Series appears only after `df.to_pandas()`.
 - Inside `filter`, `with_columns`, `select`, and `group_by`, refer to a column with the lazy expression `pl.col("name")`. The same expression works on a DataFrame and on `df.lazy()`.
-- **Array or Series?** A standalone array, one whose values are never added to a DataFrame, stays a **NumPy array** and uses NumPy functions: `make_array(1, 2)` → `np.array([1, 2])`, then `np.mean(arr)`, `np.append(arr, x)`, `np.count_nonzero(arr)`. An array that is added to a DataFrame is wrapped in a named Series, `pl.Series("name", arr)`, and from then on uses Series or `pl.col` methods. See [Arrays: standalone array or DataFrame column?](#arrays-standalone-array-or-dataframe-column).
-- **Building a DataFrame:** pass a list of named Series, `pl.DataFrame([pl.Series("a", [...]), pl.Series("b", [...])])`, and add a column with `df.with_columns(pl.Series("c", values))`. Do not build a DataFrame from a dictionary (`pl.DataFrame({"a": [...]})`).
+- **Arrays are built with `make_array`.** `make_array(1, 2)` stays `make_array(1, 2)`, imported with `from datascience import make_array`. It returns an ordinary NumPy array. `np.array(...)` is used only to *convert* an existing sequence, such as a row tuple (`np.array(df.row(0))`), never to build an array from values written out by hand. `make_array()` is the empty float array.
+- **Arrays, not lists.** Values are never written as a Python list `[...]`. A list stays only where a library asks for one: the list of Series in `pl.DataFrame([...])` and `pl.concat([...])`, column names (`y=[...]`, `kdims`), colors (`color=[...]`), map coordinates (`[lat, lon]`), HoloViews shape lists (`hv.Segments([(x0, y0, x1, y1)])`, `hv.Rectangles`), and a column whose cells are themselves lists. A list also stays for five patterns kept as Python lists on purpose: plot coordinates (`hv.Scatter(([x], [y]))`, `hv.Curve([(x1, y1), (x2, y2)])`, `hv.Curve(([x1, x2], [y1, y2]))`), a growing Python list (`errors = []` + `errors.append(v)`, Ch 17.6), the Ch 15.3 `sample = [[x, y], ...]` point list looped over for error lines, repeated labels (`np.array(['A']*n + ['B']*m)`, Ch 18), and several column names (`group_by(["Flavor", "Color"])`, `sort([...])`, `select([...])`).
+- **Array or Series?** A standalone array, one whose values are never added to a DataFrame, stays a **NumPy array** and uses NumPy functions: `np.mean(arr)`, `np.append(arr, x)`, `np.count_nonzero(arr)`. An array that is added to a DataFrame is wrapped in a named Series, `pl.Series("name", arr)`, and from then on uses Series or `pl.col` methods. See [Arrays: standalone array or DataFrame column?](#arrays-standalone-array-or-dataframe-column).
+- **Building a DataFrame:** pass a list of named Series, each built from an array, `pl.DataFrame([pl.Series("a", make_array(...)), pl.Series("b", make_array(...))])`, and add a column with `df.with_columns(pl.Series("c", values))`. Do not build a DataFrame from a dictionary (`pl.DataFrame({"a": [...]})`).
 - Integer sequences and loops use `np.arange`, never Python `range`: `for i in np.arange(5000)`. A float grid also stays `np.arange`; do not replace it with `pl.linear_space`. Inside an expression, an index column can be `pl.int_range(0, pl.len())`.
 - Group reductions use a [GroupBy method](https://docs.pola.rs/api/python/stable/reference/dataframe/group_by.html) such as `.sum()` or `.max()`. See [GroupBy methods](#groupby-methods).
 
@@ -41,7 +43,7 @@ A Data 8 array becomes one of two things, depending on **where its values go**. 
 
 | The array… | Polars + NumPy | Then use |
 | --- | --- | --- |
-| is never added to a DataFrame: a simulation's results, the options to draw from, histogram bins, an index list | a **NumPy array**: `np.array([...])`, `np.arange(...)`, `np.append(arr, x)` | NumPy functions: `np.mean(arr)`, `np.count_nonzero(arr)`, `arr.item(0)` |
+| is never added to a DataFrame: a simulation's results, the options to draw from, histogram bins, an index list | a **NumPy array**: `make_array(...)`, `np.arange(...)`, `np.append(arr, x)` | NumPy functions: `np.mean(arr)`, `np.count_nonzero(arr)`, `arr.item(0)` |
 | is added to a DataFrame: a new column, or the values of a table built with `pl.DataFrame` | a **named Series**: `pl.Series("name", arr)`, passed to `pl.DataFrame([...])` or `df.with_columns(...)` | Series or `pl.col` methods: `pl.col("name").mean()`, `s.mean()` |
 | comes out of a DataFrame: `df.get_column("col")` | already a Polars Series | Series methods (`s.mean()`, `s.sum()`), or `s.to_numpy()` when the next step needs NumPy |
 
@@ -49,11 +51,12 @@ Don't wrap a standalone array in `pl.Series` just to call a Series method, and d
 
 ```python
 import numpy as np
+from datascience import make_array
 import polars as pl
 
 # Standalone: the simulated outcomes are not a table yet, so they stay NumPy
 die = np.arange(1, 7)
-outcomes = np.array([])
+outcomes = make_array()
 for i in np.arange(1000):
     outcomes = np.append(outcomes, np.random.choice(die))
 print(np.mean(outcomes), np.count_nonzero(outcomes == 6))
@@ -68,9 +71,9 @@ In the table below, the **Standalone array** column is the NumPy form; the **Pol
 
 | Data 8 | Standalone array (NumPy) | Polars Series (a column) | Description | Polars input | Polars output | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| `make_array(val1, val2, ...)` | `np.array([val1, val2, ...])` | `pl.Series("name", [val1, val2, ...])` | One Polars Series of scalar values. For a column of lists, use `pl.concat_list`. | name, values; or expressions in `pl.concat_list([pl.col("a"), pl.col("b")])` | `Series` or `Expr` (list) | Example: `pl.Series("highs", [v1, v2, v3, v4])`. [example](#example-plseries-vs-plconcat_list) |
+| `make_array(val1, val2, ...)` | `make_array(val1, val2, ...)` (unchanged) | `pl.Series("name", make_array(val1, val2, ...))` | One Polars Series of scalar values. Never `np.array([...])` and never a list `pl.Series("name", [...])`. For a column of lists, use `pl.concat_list`. | name, values; or expressions in `pl.concat_list([pl.col("a"), pl.col("b")])` | `Series` or `Expr` (list) | Example: `pl.Series("highs", make_array(v1, v2, v3, v4))`. [example](#example-plseries-vs-plconcat_list) |
 | `arr.size` | `arr.size` or `len(arr)` | `s.len()` | Number of elements. | `Series.len()` | `int` | Data 8 and NumPy use the attribute `size`. Polars uses the method `len()`, as in `highs.len()`. |
-| `np.array(obj)` / `np.array([1, 2, 3])` | `np.array(obj)` | `pl.Series("x", obj)` | Converts `obj` (a list, tuple, NumPy array, or a `row` converted with `df.row(i)`) into a Polars Series. Same construction as `make_array`. The result name in arithmetic comes from the first Series. | name, list / tuple / ndarray | `Series` | `pl.Series("x", [1, 2, 3])`; a table row: `pl.Series("row", df.row(0))`. See [Converting between arrays and Series](#converting-between-arrays-and-series). [example](#example-series-arithmetic) |
+| `np.array(obj)` | `np.array(obj)` | `pl.Series("x", obj)` | Converts an existing sequence `obj` (a NumPy array, or a `row` from `df.row(i)`) into a Polars Series. As in Data 8, `np.array` *converts*; `make_array` *creates*. The result name in arithmetic comes from the first Series. | name, list / tuple / ndarray | `Series` | `pl.Series("x", make_array(1, 2, 3))`; a table row: `pl.Series("row", df.row(0))`. See [Converting between arrays and Series](#converting-between-arrays-and-series). [example](#example-series-arithmetic) |
 | `max(arr)` | `max(arr)` or `np.max(arr)` | `s.max()` | Maximum value of the Series. | Series, or `pl.col("col").max()` | scalar or Expr | Same as the built-in. Python `max(s)` also works. |
 | `min(arr)` | `min(arr)` or `np.min(arr)` | `s.min()` | Minimum value of the Series. | Series, or `pl.col("col").min()` | scalar or Expr | Same as the built-in. Python `min(s)` also works. |
 | `sum(arr)` | `sum(arr)` or `np.sum(arr)` | `s.sum()` | Sum of the values in the Series. | Series, or `pl.col("col").sum()` | scalar or Expr | Same as the built-in. Python `sum(s)` also works. |
@@ -88,15 +91,15 @@ In the table below, the **Standalone array** column is the NumPy form; the **Pol
 | `np.count_nonzero(arr)` | `np.count_nonzero(arr)` | `(s != 0).sum()` | Number of non-zero elements. On a boolean Series, `s.sum()` counts `True`. | Series or `pl.col("col") != 0` | scalar or Expr | `(pl.col("col") != 0).sum()` inside `select`. A boolean Series has no `!=` comparison, so count those with `s.sum()`. |
 | `np.all(arr)` | `np.all(arr)` | `(s != 0).all()` | True when every numeric element is non-zero. | boolean Expr from `s != 0`, or `pl.col("col") != 0` | scalar or Expr | `Series.all` requires a boolean Series. A boolean Series uses `s.all()`. |
 | `np.any(arr)` | `np.any(arr)` | `(s != 0).any()` | True when any numeric element is non-zero. | boolean Expr from `s != 0`, or `pl.col("col") != 0` | scalar or Expr | `Series.any` requires a boolean Series. A boolean Series uses `s.any()`. |
-| `np.append(arr, item)` | `np.append(arr, item)` | `pl.concat([s, pl.Series(s.name, [item])])` | A new Series with `item` at the end. The original Series is unchanged. | two Series | `Series` | Polars builds a new Series. |
+| `np.append(arr, item)` | `np.append(arr, item)` | `pl.concat([s, pl.Series(s.name, make_array(item))])` | A new Series with `item` at the end. The original Series is unchanged. | two Series | `Series` | Polars builds a new Series. |
 | `np.cumsum(arr)` | `np.cumsum(arr)` | `s.cum_sum()` | Cumulative sum. Each element includes itself and everything before it. | Series or `pl.col("col").cum_sum()` | Series or Expr | Running total. |
 | `np.diff(arr)` | `np.diff(arr)` | `s.diff()` | Consecutive differences `s[i] - s[i-1]`. The first value is null. | Series or `pl.col("col").diff()` | Series or Expr | The Series keeps its length and starts with null. NumPy returns one fewer value, and its first value is the second element minus the first. On the temperature Series, `highs.diff()` is null, then 0.787, 0.198, and 0.579. `s.diff(null_behavior="drop")` matches the shorter NumPy result. |
 | `np.sort(arr)` | `np.sort(arr)` | `s.sort()` | A new Series sorted ascending. This does not sort table rows. | Series; table rows use `df.sort` | `Series` | Table order: `df.sort("col")`. |
 | `arr.item(i)` | `arr.item(i)` | `s.item(i)` | The element at index `i` (indexes start at 0). | `i`: int | scalar | Also `s[i]`. On a one-row frame: `df.get_column("col").item(0)`. |
-| `arr.take(indices)` | `arr.take(indices)` | `s.gather(indices)` | Elements at the given indexes. `indices` is a list or a Series. | `indices`: list or Series | `Series` | Row selection on a frame is `df.gather(indices)`. |
+| `arr.take(indices)` | `arr.take(indices)` | `s.gather(indices)` | Elements at the given indexes. `indices` is an array (`make_array`, `np.arange`) or a Series. | `indices`: array or Series | `Series` | Row selection on a frame is `df.gather(indices)`. |
 | `np.random.choice(options)` / `np.random.choice(options, k)` | `np.random.choice(arr)` / `np.random.choice(arr, k)` | `s.sample(1).item()` / `s.sample(n=k, with_replacement=True)` | One draw, or `k` draws with replacement. | `n`; `with_replacement=False` by default | scalar or `Series` | NumPy draws with replacement unless `replace=False`. Polars `Series.sample` draws without replacement, so the Data 8 default passes `with_replacement=True`. `replace=False` is `with_replacement=False`. There is no `p=` weights argument. |
 | shuffle the elements | `np.random.permutation(arr)` | `s.shuffle()` | Random permutation of the Series. Every value is kept once. | optional `seed` | `Series` | Also `pl.col("col").shuffle()` inside `select` or `with_columns`. `DataFrame` has no `.shuffle()`. Chapter 12 shuffles a label column this way. |
-| `percentile(p, arr)` | `percentile(p, arr)` (Data 8 helper) | `s.quantile(p / 100)` | Quantile of the Series. Polars uses 0–1, so divide a percentile by 100. | `quantile` in 0–1; optional `interpolation` | scalar | Per group: `GroupBy.quantile(p / 100)`. |
+| `percentile(p, arr)` | `percentile(p, arr)` (`from datascience import percentile`, unchanged) | `s.quantile(p / 100)` | Quantile of the Series. Polars uses 0–1, so divide a percentile by 100. | `quantile` in 0–1; optional `interpolation` | scalar | Per group: `GroupBy.quantile(p / 100)`. |
 
 ---
 
@@ -108,8 +111,8 @@ A NumPy array and a Polars Series hold the same kind of data, so you can move be
 
 | From | Polars | Notes |
 | --- | --- | --- |
-| Python list or tuple | `pl.Series("name", values)` | The dtype is inferred (`Int64`, `Float64`, `String`, ...). |
-| NumPy array (`np.array`, `np.arange`, ...) | `pl.Series("name", arr)` | One-dimensional arrays only. The dtype carries over (`int64` becomes `Int64`). |
+| Values written out by hand | `pl.Series("name", make_array(v1, v2, ...))` | The dtype carries over (`Int64`, `Float64`, `String`, `Boolean`). Do not write a list `pl.Series("name", [...])`. |
+| NumPy array (`make_array`, `np.arange`, ...) | `pl.Series("name", arr)` | One-dimensional arrays only. The dtype carries over (`int64` becomes `Int64`). |
 | NumPy array with `np.nan` | `pl.Series("name", arr, nan_to_null=True)` | Turns `nan` into `null`. Without it, `nan` stays a float `NaN`. |
 | `row` object (`tbl.row(i)`) | `pl.Series("name", df.row(i))` | `df.row(i)` is a tuple of the row's values. |
 | Table column | `df.get_column("col")` | Already a Series. No conversion needed. |
@@ -130,14 +133,15 @@ Follow the [array-or-Series rule](#arrays-standalone-array-or-dataframe-column):
 
 ```python
 import numpy as np
+from datascience import make_array
 import polars as pl
 
 # Array -> Series
-x = pl.Series("x", [1, 2, 3])                      # from a list
-y = pl.Series("y", np.array([4.0, 5.0, 6.0]))      # from a NumPy array
-df = pl.DataFrame([pl.Series("a", [1, 2]), pl.Series("b", [3, 4])])
+x = pl.Series("x", make_array(1, 2, 3))           # values written out by hand
+y = pl.Series("y", np.arange(4.0, 7.0))           # from another NumPy array
+df = pl.DataFrame([pl.Series("a", make_array(1, 2)), pl.Series("b", make_array(3, 4))])
 r = pl.Series("row", df.row(0))                    # from a table row
-m = pl.Series("m", np.array([1.0, np.nan]), nan_to_null=True)
+m = pl.Series("m", make_array(1.0, np.nan), nan_to_null=True)
 
 print(y)
 print(r)
@@ -216,7 +220,7 @@ Data 8 names a new column in the call: `tbl.with_column("pair", values)`. Polars
 
 `.alias("name")` works on:
 
-- a **Polars Series**, such as `pl.Series("tmp", [1, 2, 3])`
+- a **Polars Series**, such as `pl.Series("tmp", make_array(1, 2, 3))`
 - a **lazy expression**, such as `pl.col("a")`, `pl.col("a") * 2`, `pl.concat_list([pl.col("a"), pl.col("b")])`, or `pl.when(...)`
 
 It only changes the **column name**. The values stay the same, and the original column is unchanged.
@@ -246,11 +250,13 @@ See [example](#example-alias).
 Build a frame from named Series. In Polars 2.0 the Series length is the frame height, so pass them to the constructor:
 
 ```python
+import numpy as np
 import polars as pl
+from datascience import make_array
 
 df = pl.DataFrame([
-    pl.Series("foo", [1, 2]),
-    pl.Series("bar", [3, 4]),
+    pl.Series("foo", make_array(1, 2)),
+    pl.Series("bar", make_array(3, 4)),
 ])
 
 # Computed column: lazy pl.col expressions, then .alias
@@ -273,8 +279,8 @@ df = df.with_columns(
 
 | Data 8 | Polars Equivalent | Description | Polars input | Polars output | Notes | Example |
 | --- | --- | --- | --- | --- | --- | --- |
-| `Table()` | `pl.DataFrame()` | Empty DataFrame. | `data`, `schema`, `schema_overrides`, `strict=True`, `orient` — [API](https://docs.pola.rs/api/python/stable/reference/dataframe/) | `DataFrame` | To start from columns, pass Series: `pl.DataFrame([pl.Series("a", [1]), ...])`. | |
-| `Table().read_table(filename)` | `pl.read_csv(filename)` or `pl.read_parquet(filename)` | DataFrame from a file. Pick the reader that matches the file type. | [I/O reference](https://docs.pola.rs/api/python/stable/reference/io.html) | `DataFrame` | `pl.scan_csv` returns a LazyFrame; the same `pl.col` expressions apply. A file that separates rows with carriage returns needs `eol_char='\r'`. A carriage return is the character `\r`. Most files end each row with a line feed `\n`, or with both (`\r\n`). `movies_by_year.csv`, `minard.csv`, `educ_inc.csv`, and `family_heights.csv` end each row with `\r` only. | |
+| `Table()` | `pl.DataFrame()` | Empty DataFrame. | `data`, `schema`, `schema_overrides`, `strict=True`, `orient` — [API](https://docs.pola.rs/api/python/stable/reference/dataframe/) | `DataFrame` | To start from columns, pass Series: `pl.DataFrame([pl.Series("a", make_array(1)), ...])`. | |
+| `Table().read_table(filename)` | `pl.read_csv(filename)` or `pl.read_parquet(filename)` | DataFrame from a file. Pick the reader that matches the file type. | [I/O reference](https://docs.pola.rs/api/python/stable/reference/io.html) | `DataFrame` | `pl.scan_csv` returns a LazyFrame; the same `pl.col` expressions apply. Every CSV in the repo (textbook, lectures, demo, and `data8-polars-instructions/data`) uses standard line endings, so do not pass `eol_char`. (A file that ends rows with a carriage return `\r` only would need `eol_char='\r'`; none in the textbook do.) | |
 | `tbl.with_column(name, values)` | `df.with_columns(pl.Series(name, values))` or `df.with_columns(expr.alias(name))` | A DataFrame with an additional or replaced column. | `*exprs`, `**named_exprs` | `DataFrame` | Computed columns use `pl.col`. A constant uses `pl.lit(x).alias(name)`. | [example](#example-adding-columns-with-plcol) |
 | `tbl.with_columns(n1, v1, n2, v2, ...)` | `pl.DataFrame([pl.Series(n1, v1), pl.Series(n2, v2)])` or several expressions in one `with_columns` | Several columns in one call. | Series list, or `df.with_columns(*exprs, **named_exprs)` | `DataFrame` | Name every Series. | [example](#example-adding-columns-with-plcol) |
 | `tbl.column(col)` | `df.get_column("col")` | The column as a Polars Series. | `name`: string | `Series` | Inside `filter` / `with_columns` / `group_by`, write `pl.col("col")` and keep it lazy. One element: `.item(0)`. | [example](#example-get_column) |
@@ -299,17 +305,18 @@ df = df.with_columns(
 | rows that fail the predicate | `df.filter(~(pl.col("column") <op> value))` | Copy with the matching rows removed. | boolean Expr | `DataFrame` | See [Table.where Predicates](#tablewhere-predicates). | |
 | `tbl.take(np.arange(k))` / `tbl.take(0)` | `df.head(k)` / `df.head(1)` | `take` of the first rows is `head`. | `n` | `DataFrame` | The index list `np.arange(k)` is the first `k` rows. If the cell only displays them, it ends with `.show(k)` instead. See [Table.take: head, tail, or gather](#tabletake-head-tail-or-gather). | |
 | `tbl.take(np.arange(num_rows - k, num_rows))` | `df.tail(k)` | `take` of the last rows is `tail`. | `n` | `DataFrame` | The index list ends at the last row. See [Table.take: head, tail, or gather](#tabletake-head-tail-or-gather). | |
-| `tbl.take(row_indices)` | `df.gather(row_indices)` | Rows at the given indexes. Use `gather` only when the rows are neither the first few nor the last few. | list, `np.arange`, or Series of indexes | `DataFrame` | `gather([3, 18, 100])` and `gather(np.arange(3, 6))` stay `gather`. Keep `np.arange` for the index list. See [Table.take: head, tail, or gather](#tabletake-head-tail-or-gather). | |
-| `tbl.sample(k)` | `df.sample(n=k, with_replacement=True)` | `k` rows, drawn with replacement. | `n`; `with_replacement=True` | `DataFrame` | Data 8 `Table.sample` draws with replacement unless `with_replacement=False` is passed. Polars `DataFrame.sample` draws without replacement, and with no `n` it draws one row. Pass `with_replacement=True` to match the Data 8 default. Polars `sample` has no weights. `sample_proportions` stays a helper that draws with `np.random.choice(..., p=proportions)`, or the unchanged `datascience` function, and the draws are stored in a Series. | |
+| `tbl.take(row_indices)` | `df.gather(row_indices)` | Rows at the given indexes. Use `gather` only when the rows are neither the first few nor the last few. | NumPy array (`make_array`, `np.arange`) or Series of indexes | `DataFrame` | `gather(make_array(3, 18, 100))` and `gather(np.arange(3, 6))` stay `gather`. Keep `np.arange` for the index list. See [Table.take: head, tail, or gather](#tabletake-head-tail-or-gather). | |
+| `tbl.sample(k)` | `df.sample(n=k, with_replacement=True)` | `k` rows, drawn with replacement. | `n`; `with_replacement=True` | `DataFrame` | Data 8 `Table.sample` draws with replacement unless `with_replacement=False` is passed. Polars `DataFrame.sample` draws without replacement, and with no `n` it draws one row. Pass `with_replacement=True` to match the Data 8 default. Polars `sample` has no weights. `sample_proportions` stays the unchanged `datascience` function (`from datascience import make_array, sample_proportions`). It returns a NumPy array, so call `.item(i)` on it directly; wrap it in `pl.Series("name", ...)` only when it is added to a DataFrame (Chapter 11.2 `Random Sample`). | |
 | `tbl.sample(k, with_replacement=False)` | `df.sample(n=k, with_replacement=False)` | `k` distinct rows. | `n`; `with_replacement=False` | `DataFrame` | Both sides draw without replacement. Polars still needs `n`: omitting it draws one row. | |
 | `tbl.sample()` | `df.sample(n=df.height, with_replacement=True)` | A bootstrap resample: as many rows as the table, drawn with replacement. | `n=df.height`; `with_replacement=True` | `DataFrame` | Data 8 `Table.sample(k=None, with_replacement=True)`: with no arguments it draws `num_rows` rows *with* replacement, so it is not a shuffle. Polars with no `n` returns one row and draws without replacement, so both arguments are needed. Chapters 13 and 16 resample this way. | |
 | `tbl.sample(with_replacement=False)` | `df.sample(n=df.height, with_replacement=False, shuffle=True)` | A shuffle of every row. | `n=df.height`; `with_replacement=False`; `shuffle=True` | `DataFrame` | Data 8 with `with_replacement=False` and no `k` permutes the whole table. Polars with no `n` returns one row, so the call passes `n=df.height`. `DataFrame` has no `.shuffle()`. To shuffle one label column, use the next row instead. | |
 | `tbl.sample(with_replacement=False).column(col)` | `pl.col("col").shuffle()` | Random permutation of one column. Every value is kept once. | optional `seed` | `Expr` or `Series` | Chapter 12 label shuffles: `select(pl.col("Maternal Smoker").shuffle()).to_series(0)`, or `with_columns(pl.col("Group").shuffle().alias("Shuffled Label"))`. `s.shuffle()` is the Series form. `DataFrame` has no `.shuffle()`. | |
 | `tbl.bin(column)` / `tbl.bin(column, bins)` | `df.get_column(col).hist(bin_count=10)` or `hist(bins=edges)` | Counts of values in each interval. Default is 10 equal-width bins from min to max. | `bin_count` or `bins` | `DataFrame` with breakpoint, category, and count | To label bins and then count them: `bin_intervals` plus `GroupBy.len()`. `Series.cut` is deprecated. | [example](#example-histogram-and-bins) |
 | `tbl.apply(function)` / `tbl.apply(function, col1, col2, ...)` | `df.with_columns(pl.col("col").map_elements(function, return_dtype=...).alias("Name"))` | Applies a Python function to each element. Slower than a native expression. | `function`, `return_dtype` | Expr | Prefer `pl.col("a") * 2` when a native expression exists. For `return_dtype`, use Python `int` or `float` (they become Polars `Int64` / `Float64`). Do not write `pl.Int64` / `pl.Float64` here. Several columns: `pl.struct(["a", "b"]).map_elements(...)`. | [example](#example-map_elements) |
-| `tbl.group(column_or_columns)` | `df.group_by(pl.col("col")).len()` | One row per distinct value. The default Data 8 summary is a count. | `pl.col` or a list of columns; optional `maintain_order=True` | `DataFrame` | `len(name="count")` names the count column. | [example](#example-group_by-methods) |
-| `tbl.group(column_or_columns, function)` | `df.group_by(pl.col("col")).max()` and the other GroupBy methods | Reduce the other columns with a [GroupBy method](#groupby-methods). | group key, then `.sum()`, `.mean()`, `.max()`, `.min()`, `.median()`, `.quantile()`, `.first()`, `.last()`, `.n_unique()`, `.head()`, `.tail()`, `.all()`, `.having()`, or `.map_groups()` | `DataFrame` | Select columns before `.sum()` or `.mean()` when a string column is present. `.max()` can run on strings. | [example](#example-group_by-methods) |
+| `tbl.group(column_or_columns)` | `df.group_by(pl.col("col")).len().sort("col")` | One row per distinct value. The default Data 8 summary is a count. | `pl.col` or a list of columns | `DataFrame` | `len(name="count")` names the count column. Polars returns groups in no fixed order; Data 8 sorts them by the grouped column, so end with `.sort("col")`. Do not use `maintain_order=True`. | [example](#example-group_by-methods) |
+| `tbl.group(column_or_columns, function)` | `df.group_by(pl.col("col")).max().sort("col")` and the other GroupBy methods | Reduce the other columns with a [GroupBy method](#groupby-methods). | group key, then `.sum()`, `.mean()`, `.max()`, `.min()`, `.median()`, `.quantile()`, `.first()`, `.last()`, `.n_unique()`, `.head()`, `.tail()`, `.all()`, `.having()`, or `.map_groups()` | `DataFrame` | Select columns before `.sum()` or `.mean()` when a string column is present. `.max()` can run on strings. | [example](#example-group_by-methods) |
 | `tbl.pivot(col1, col2)` | `df.pivot(col1, index=col2, aggregate_function="len")` | Pivot: each value of `col1` becomes a column, each value of `col2` becomes a row. Cells are counts. | `on` (positional), `index`, `values`, `aggregate_function` (`"min"`, `"max"`, `"first"`, `"last"`, `"sum"`, `"mean"`, `"median"`, `"len"`) | `DataFrame` | The first argument is `on` (formerly `columns`). | [example](#example-group_by-methods) |
+| `tbl.pivot(col1, col2)` on a table with only those two columns | `df.pivot(col1, index=col2, values=col1, aggregate_function="len")` | Same count pivot. | `values=col1` | `DataFrame` | Polars needs a values column; with only two columns none is left, and the plain form raises `InvalidOperationError`. Chapter 18. | |
 | `tbl.pivot(col1, col2, values, collect)` | `df.pivot(col1, index=col2, values=values, aggregate_function=collect)` | Same pivot, aggregating a third column. | `aggregate_function="max"`, `"sum"`, `"mean"`, and the other names above | `DataFrame` | Notebook: `df.pivot("Flavor", index="Color", values="Price", aggregate_function="max")`. | [example](#example-group_by-methods) |
 | `tblA.join(colA, tblB)` / `tblA.join(colA, tblB, colB)` | `dfA.join(dfB, on="colA")` or `dfA.join(dfB, left_on="colA", right_on="colB")` | Rows whose key appears in both frames, with columns from both. | `on` or `left_on`/`right_on`; `how` (`inner`, `left`, `right`, `full`, `semi`, `anti`, `cross`) | `DataFrame` | Default `how` is inner. | |
 | `tbl.with_row(values)` | `pl.concat([df, pl.DataFrame([dict(zip(df.columns, values))])])` or `df.extend(other)` | Adds one row. Match column names and types. | a one-row DataFrame | `DataFrame` | `extend` modifies in place. `concat` returns a new frame. | [example](#example-dataframeextend-adding-rows) |
@@ -330,7 +337,7 @@ df = df.with_columns(
 Rules:
 
 - **`head` and `tail` need no gaps.** `np.arange(5)` is rows 0 to 4, so it is `head(5)`. `np.arange(3, 6)` skips rows 0 to 2, so it is not `head`. Use `gather(np.arange(3, 6))` or `df.slice(3, 3)`.
-- **`gather` takes a list, `np.arange`, or a Series of positions.** Keep `np.arange` for the index list. `top.take(make_array(3, 18, 100))` is `top.gather([3, 18, 100])`. `top.take(np.arange(start, top.num_rows, 10))` is `top.gather(np.arange(start, top.height, 10))`, because it keeps every tenth row.
+- **`gather` takes a NumPy array (`make_array`, `np.arange`) or a Series of positions.** Keep `np.arange` for the index list. `top.take(make_array(3, 18, 100))` is `top.gather(make_array(3, 18, 100))`; `make_array` is unchanged. `top.take(np.arange(start, top.num_rows, 10))` is `top.gather(np.arange(start, top.height, 10))`, because it keeps every tenth row.
 - **Keep `head` or `tail` when the result feeds another step.** `head(10)` stays when the chain continues, as in `group_by('Year').len(name='count').sort('Year').head(10).with_columns(...)`. `.show` would end the chain.
 - **Use `show(k)` when the cell only displays the first rows.** `sort("SALARY", descending=True).take(np.arange(5))` ends the cell, so it is `.show(5)`. `show` prints and returns `None`.
 - **There is no `show` for the last rows.** Use `df.tail(k)` as the last line of the cell. The chapter 1–12 notebooks never take the last rows.
@@ -345,7 +352,7 @@ Notebook cases:
 | `sort("SALARY", descending=True).take(np.arange(5))` | `sort("SALARY", descending=True).show(5)` |
 | `group('Year').take(np.arange(10)).barh('Year')` | `group_by('Year').len(name='count').sort('Year').head(10)` then the chart |
 | `take(np.arange(num_rows - 1))` | `head(height - 1)` |
-| `top.take(make_array(3, 18, 100))` | `top.gather([3, 18, 100])` |
+| `top.take(make_array(3, 18, 100))` | `top.gather(make_array(3, 18, 100))` |
 | `top.take(np.arange(start, top.num_rows, 10))` | `top.gather(np.arange(start, top.height, 10))` |
 
 ### GroupBy methods
@@ -356,41 +363,41 @@ Reference: [GroupBy](https://docs.pola.rs/api/python/stable/reference/dataframe/
 
 | GroupBy method | Data 8 group function | Call |
 | --- | --- | --- |
-| `.len(name="len")` | `tbl.group(col)` (count rows) | `df.group_by(pl.col("col")).len()` |
-| `.sum()` | `sum` | `df.select("col", "value").group_by(pl.col("col")).sum()` |
-| `.mean()` | `np.mean` / `np.average` | `df.select("col", "value").group_by(pl.col("col")).mean()` |
-| `.min()` | `min` | `df.select("col", "value").group_by(pl.col("col")).min()` |
-| `.max()` | `max` | `df.group_by(pl.col("col")).max()` |
-| `.median()` | median | `df.select("col", "value").group_by(pl.col("col")).median()` |
-| `.quantile(q)` | `percentile(p)` with `q = p / 100` | `df.select("col", "value").group_by(pl.col("col")).quantile(p / 100)` |
-| `.n_unique()` | count of distinct values in each column | `df.group_by(pl.col("col")).n_unique()` |
-| `.first()` / `.last()` | first or last value in each column | `df.group_by(pl.col("col")).first()` |
-| `.head(n)` / `.tail(n)` | first or last `n` rows of each group | `df.group_by(pl.col("col")).head(1)` |
-| `.all()` | each column collected into a list | `df.group_by(pl.col("col")).all()` |
-| `.having(*predicates)` | keep groups that match, then reduce | `df.group_by(pl.col("col")).having(pl.len() > 1).len()` |
-| `.map_groups(function)` | a custom Python function | `df.group_by("col").map_groups(function)` |
+| `.len(name="len")` | `tbl.group(col)` (count rows) | `df.group_by(pl.col("col")).len().sort("col")` |
+| `.sum()` | `sum` | `df.select("col", "value").group_by(pl.col("col")).sum().sort("col")` |
+| `.mean()` | `np.mean` / `np.average` | `df.select("col", "value").group_by(pl.col("col")).mean().sort("col")` |
+| `.min()` | `min` | `df.select("col", "value").group_by(pl.col("col")).min().sort("col")` |
+| `.max()` | `max` | `df.group_by(pl.col("col")).max().sort("col")` |
+| `.median()` | median | `df.select("col", "value").group_by(pl.col("col")).median().sort("col")` |
+| `.quantile(q)` | `percentile(p)` with `q = p / 100` | `df.select("col", "value").group_by(pl.col("col")).quantile(p / 100).sort("col")` |
+| `.n_unique()` | count of distinct values in each column | `df.group_by(pl.col("col")).n_unique().sort("col")` |
+| `.first()` / `.last()` | first or last value in each column | `df.group_by(pl.col("col")).first().sort("col")` |
+| `.head(n)` / `.tail(n)` | first or last `n` rows of each group | `df.group_by(pl.col("col")).head(1).sort("col")` |
+| `.all()` | each column collected into a list | `df.group_by(pl.col("col")).all().sort("col")` |
+| `.having(*predicates)` | keep groups that match, then reduce | `df.group_by(pl.col("col")).having(pl.len() > 1).len().sort("col")` |
+| `.map_groups(function)` | a custom Python function | `df.group_by("col").map_groups(function).sort("col")` |
 
 Each reducer runs on every column that is not a group key, and the result keeps those column names. Chain `.rename({"value": "total"})` when the new column needs a different label.
 
 From the conversion notebook:
 
-- `.sum()` on a string column raises `InvalidOperationError`. Select the group key and the numeric columns first: `df.select("Flavor", "Price").group_by(pl.col("Flavor")).sum()`.
-- `.max()` can run on strings (lexicographic maximum), so `df.group_by(pl.col("Flavor")).max()` keeps `Color` and `Price`.
+- `.sum()` on a string column raises `InvalidOperationError`. Select the group key and the numeric columns first: `df.select("Flavor", "Price").group_by(pl.col("Flavor")).sum().sort("Flavor")`.
+- `.max()` can run on strings (lexicographic maximum), so `df.group_by(pl.col("Flavor")).max().sort("Flavor")` keeps `Color` and `Price`.
 - `map_groups` takes column **names** as the group keys. `group_by(pl.col("Flavor")).map_groups(...)` is not allowed; write `group_by("Flavor")`.
-- Pass `maintain_order=True` when groups should stay in first-seen order, which is what Data 8 does. The notebook omits it.
+- Polars returns the groups in no fixed order, and it can change from run to run. Data 8 `group` sorts the result by the grouped column, so every `group_by` chain ends with `.sort(key)`, for example `.sort("Flavor")`. Do not use `maintain_order=True`: it keeps first-seen order, which is not what Data 8 shows.
 
 ```python
-df.group_by(pl.col("Flavor")).max()
-df.select("Flavor", "Price").group_by(pl.col("Flavor")).sum()
+df.group_by(pl.col("Flavor")).max().sort("Flavor")
+df.select("Flavor", "Price").group_by(pl.col("Flavor")).sum().sort("Flavor")
 ```
 
 ---
 
 ## Visualization Functions
 
-Polars does not plot. Chapter 7 draws with **hvPlot** on the DataFrame. Import `hvplot.polars` next to `import polars as pl`. The chart is a method on `df`, so the column names stay in the call. Data 8 blue is `#002fa7` and gold is `#706700`. The third bar color is `#006a94` and the fourth is `#1e6400`.
+Polars does not plot. Chapters 1–12 draw with **hvPlot** on the DataFrame. Import `hvplot.polars` next to `import polars as pl`. The chart is a method on `df`, so the column names stay in the call. Data 8 blue is `#002fa7` and gold is `#706700`. The third bar color is `#006a94` and the fourth is `#1e6400`.
 
-A later `plt.title` or `plots.scatter` on the current axes still needs matplotlib.
+Titles, axis limits, and marker overlays are hvPlot / HoloViews options, not matplotlib: `.opts(title=..., ylim=...)` and `chart * hv.Scatter(([x], [0])).opts(color="red")` (Chapters 11–12).
 
 | Data 8 | hvPlot | Description | Polars input | Polars output | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -402,7 +409,7 @@ A later `plt.title` or `plots.scatter` on the current axes still needs matplotli
 | `tbl.hist(column, bins=edges)` | `df.hvplot.hist("column", bins=edges, normed=True)` | Histogram with those bin edges. | `bins` as a count or a list of edges | plot | A Polars Series of edges is `.to_list()` before `bins`. Keep `np.arange` for a float edge list. An explicit `normed=False` stays `normed=False`; that figure is counts, not a histogram. |
 | `tbl.scatter(x)` / `tbl.plot(x)` | `df.hvplot.scatter(x="x", y=[...])` / `df.hvplot.line(x="x", y=[...])` | Every other column against the common axis. | `x`; `y` as a list of column names; optional `color` | plot | A single axis argument does not mean "every other column." Name the vertical columns in `y`. See [Overlaid graphs](#overlaid-graphs). |
 | `tbl.barh(categories)` with several value columns | `df.hvplot.barh("categories", ["c1", "c2", ...], color=[...])` | Several bar charts on the same axes. | category column; list of value columns; `color` | plot | Chapter 7.3 uses the four Data 8 colors in column order. A selected pair uses the first two. |
-| `tbl.plot(column_for_xticks=k)` | one matplotlib `plots.plot` per remaining column | Every other column against column `k`. | Series via `get_column` | plot | Chapter 1, not Chapter 7. The next lines are `plt.title` and `plt.show` on the current axes, so this stays matplotlib. |
+| `tbl.plot(column_for_xticks=k)` | `df.hvplot.line(x="col_k", y=[...], title=...)` | Every other column against column `k`. | `x`; `y` as a list of column names | plot | Chapter 1.3.1: `cum_counts.hvplot.line(x="Chapter", y=["Jim", "Tom", "Huck"], title="Cumulative Number of Times Each Name Appears")`. Name the vertical columns in `y`. |
 
 ### Overlaid graphs
 
@@ -418,6 +425,30 @@ df.hvplot.barh("Ethnicity/Race", ["USA All", "CA All"], color=["#002fa7", "#7067
 - **Barh.** The first argument is the category column. The second is the list of value columns.
 - **Colors.** Father / 2014 / USA All are blue `#002fa7`. Mother / 2019 / CA All are gold `#706700`.
 - **Categorical bars that should be equally spaced.** Cast a numeric category to string before `barh`, as in `with_columns(pl.col("Year").cast(pl.String)).hvplot.barh("Year", "count")`. A numeric Year would space 1921 far from 1937.
+
+---
+
+## Patterns from Chapters 13–18
+
+| Data 8 | Polars / NumPy / hvPlot | Notes |
+| --- | --- | --- |
+| `minimize(f)` | `from datascience import minimize`, unchanged | Like `make_array`, `sample_proportions` and `percentile`. Returns a NumPy array. |
+| `standard_units(x)` | `(x - x.mean())/x.std(ddof=0)` | Works on a NumPy array and on a Series. `np.mean` / `np.std` on a Polars Series can fail. |
+| `tbl.scatter(x, y, fit_line=True)` | `df.hvplot.scatter(x=x, y=y) * hv.Slope(slope, intercept)` | Data 8 blue line. |
+| `tbl.scatter(x, y, group=col)` with a color column | `df.hvplot.scatter(x=x, y=y, color="Color", cmap={"darkblue": "#002fa7", "gold": "#706700"})` | `by=` assigns colors in first-seen order, which can swap them. |
+| `tbl.move_to_start(c)` | `df.select(c, pl.exclude(c))` | Returns a new DataFrame. |
+| `tbl.apply(fn)` over whole rows | `for row in df.iter_rows():` + `np.append`, or `pl.struct(...).map_elements(fn, return_dtype=...)` | `iter_rows` yields tuples, like `df.row(i)`. |
+| `tbl.split(k)` | `shuffled = df.sample(n=df.height, with_replacement=False, shuffle=True)`, then `shuffled.head(k)` and `shuffled.tail(df.height - k)` | |
+| `Table(labels)` + `.append(row)` in a loop | `pl.DataFrame(schema={...})` + `pl.concat([df, pl.DataFrame([pl.Series("a", make_array(a)), pl.Series("b", make_array(b))])])` | Chapter 16.3. When the row is one array, `row = make_array(...)`, use `pl.DataFrame([row], schema=df.schema, orient="row")` (Chapter 9.4). |
+| `tbl.join(...)` row order | `dfA.join(dfB, ..., maintain_order="left")`, then `.sort(key)` | Data 8 sorts joined rows by the key. |
+| `np_int * s` or `s[np_int]` | `s * np_int`, `s.item(i)` | Polars 2.1 rejects a NumPy integer on the left of Series arithmetic and as a Series index; loop counters from `np.arange` are NumPy integers. |
+| interval bar `plots.plot([l, r], [0, 0], color="gold", lw=8)` | `hv.Segments([(l, 0, r, 0)]).opts(color="#706700", line_width=8)` | |
+| `plots.plot(x, y)` curve | `hv.Curve((x, y))` | Several panels: HoloViews `+` layout, `.cols(1)`. |
+| `plots.plot([x1, x2], [y1, y2])` line | `hv.Curve([(x1, y1), (x2, y2)])` | Coordinates stay Python lists (a kept list pattern). |
+| `plots.scatter(x, y)` one marker | `hv.Scatter(([x], [y]))` | Coordinates stay Python lists. |
+| a growing Python list `errors = []`, `errors.append(v)` | unchanged: `errors = []`, `errors.append(v)` | Chapter 17.6; a kept list pattern. |
+| `np.array(['A']*n + ['B']*m)` | unchanged | Chapter 18; `np.array` converts the repeated list. |
+| `np.array([row_array])` (one-row 2D array) | `row_array.reshape(1, -1)` | Chapter 17.6, for `pl.from_numpy`. |
 
 ---
 
@@ -442,7 +473,7 @@ df.filter((pl.col("age") < 18) | (pl.col("age") > 65))
 | `are.between(x, y)` | `pl.col("col").is_between(x, y, closed="left")` | Greater than or equal to `x` and less than `y`. | `lower_bound`, `upper_bound`, `closed` | boolean Expr | <ul><li>`closed="left"`: include the lower bound and exclude the upper bound (`x` <= value < `y`)</li><li>`closed="right"`: exclude the lower bound and include the upper bound (`x` < value <= `y`)</li><li>`closed="both"`: include both bounds (`x` <= value <= `y`)</li></ul> |
 | `are.between_or_equal_to(x, y)` | `pl.col("col").is_between(x, y, closed="both")` | From `x` through `y`, inclusive. | `closed="both"` | boolean Expr | Bounds may themselves be `pl.col(...)`. |
 | `are.strictly_between(x, y)` | `pl.col("col").is_between(x, y, closed="none")` | Greater than `x` and less than `y`. | `closed="none"` | boolean Expr | |
-| `are.contained_in(A)` | `pl.col("col").is_in(A)` | Value is an element of list `A`. | collection or Series | boolean Expr | A string `A` meaning "value is a substring of `A`" needs a small Python predicate via `map_elements`. |
+| `are.contained_in(A)` | `pl.col("col").is_in(A)` | Value is an element of `A`. | array (`make_array(...)`) or Series | boolean Expr | A string `A` meaning "value is a substring of `A`" needs a small Python predicate via `map_elements`. |
 | `are.containing(S)` | `pl.col("col").str.contains(S)` | String contains `S`. | `pattern`; optional `literal` | boolean Expr | `df.filter(pl.col("name").str.contains("Smith"))` |
 
 **Example**
@@ -475,7 +506,7 @@ Two ways to name a column, used for different jobs:
 
 | Job | Write | Why |
 | --- | --- | --- |
-| Values you already have that will be added to a DataFrame | `pl.Series("x", [1, 2, 3])` | Eager Series, passed to `pl.DataFrame` or `with_columns`. A standalone array stays `np.array([1, 2, 3])`. |
+| Values you already have that will be added to a DataFrame | `pl.Series("x", make_array(1, 2, 3))` | Eager Series, passed to `pl.DataFrame` or `with_columns`. A standalone array is just `make_array(1, 2, 3)`. |
 | A column inside `filter`, `with_columns`, `select`, or `group_by` | `pl.col("x")` | Lazy expression. It also runs on `df.lazy()` and still refers to the right column after you reassign `df`. |
 | An integer index column | `pl.Series("idx", np.arange(n))` or `pl.int_range(0, pl.len())` | Keep `np.arange`, never Python `range`. `pl.int_range` is the lazy form. |
 | A float grid | `np.arange(start, stop, step)` | Keep `np.arange`. Do not replace it with `pl.linear_space`. |
@@ -493,21 +524,22 @@ df.lazy().filter(pl.col("Price") > 5).select(pl.col("Flavor"), pl.col("Price")).
 
 ### Example: `pl.Series` vs `pl.concat_list`
 
-`pl.Series("nums", [1, 2, 3])` is one Series of scalars: the column form of `make_array(1, 2, 3)`. A standalone `make_array(1, 2, 3)` stays `np.array([1, 2, 3])`.
+`pl.Series("nums", make_array(1, 2, 3))` is one Series of scalars: the column form of the standalone array `make_array(1, 2, 3)`.
 
 `pl.concat_list` builds a list in each row from other columns. Pass `pl.col` expressions or column-name strings.
 
 ```python
 import polars as pl
+from datascience import make_array
 
-s = pl.Series("nums", [1, 2, 3])
+s = pl.Series("nums", make_array(1, 2, 3))
 print(s)
 print("dtype:", s.dtype)
 print("first element:", s.item(0))
 
 df = pl.DataFrame([
-    pl.Series("a", [1, 2, 3]),
-    pl.Series("b", [10, 20, 30]),
+    pl.Series("a", make_array(1, 2, 3)),
+    pl.Series("b", make_array(10, 20, 30)),
 ])
 out = df.with_columns(
     pl.concat_list([pl.col("a"), pl.col("b")]).alias("pair")
@@ -545,16 +577,17 @@ pair dtype: List(Int64)
 
 ### Example: Series arithmetic
 
-Arithmetic on a named Series, such as a column taken from a DataFrame. The result keeps the first Series' name. A standalone array would stay NumPy (`3 * np.array([1, 2, 3]) + 4`). Loops use `np.arange`, not Python `range`.
+Arithmetic on a named Series, such as a column taken from a DataFrame. The result keeps the first Series' name. A standalone array would stay NumPy (`3 * make_array(1, 2, 3) + 4`). Loops use `np.arange`, not Python `range`.
 
 ```python
 import numpy as np
+from datascience import make_array
 import polars as pl
 
-print(pl.Series("x", [1, 2, 3]))
-print(3 * pl.Series("x", [1, 2, 3]) + 4)
-print(pl.Series("x", [1, 2, 3]) + pl.Series("y", [1, 10, 100]))
-print(pl.Series("x", [1.0, 4.0, 9.0]).sqrt())
+print(pl.Series("x", make_array(1, 2, 3)))
+print(3 * pl.Series("x", make_array(1, 2, 3)) + 4)
+print(pl.Series("x", make_array(1, 2, 3)) + pl.Series("y", make_array(1, 10, 100)))
+print(pl.Series("x", make_array(1.0, 4.0, 9.0)).sqrt())
 
 for i in np.arange(4):
     print(i)
@@ -599,8 +632,9 @@ Series: 'x' [f64]
 
 ```python
 import polars as pl
+from datascience import make_array
 
-s = pl.Series("x", [1234.5678, 1250.0, 1350.0])
+s = pl.Series("x", make_array(1234.5678, 1250.0, 1350.0))
 
 print(s.round(1))
 print((s / 100).round(0) * 100)
@@ -631,10 +665,11 @@ Series: 'x' [f64]
 
 ```python
 import polars as pl
+from datascience import make_array
 
 df = pl.DataFrame([
-    pl.Series("a", [1, 2, 3]),
-    pl.Series("b", [10, 20, 30]),
+    pl.Series("a", make_array(1, 2, 3)),
+    pl.Series("b", make_array(10, 20, 30)),
 ])
 
 # pl.col * 2 is still named "a", so with_columns replaces column a
@@ -647,7 +682,7 @@ print(df.with_columns((pl.col("a") * 2).alias("a_times_2")))
 print(df.with_columns(a_times_2=pl.col("a") * 2))
 
 # A Series you built in Python keeps the name you gave it
-print(pl.Series("tmp", [10, 20, 30]).alias("tens"))
+print(pl.Series("tmp", make_array(10, 20, 30)).alias("tens"))
 ```
 
 `pl.col("a") * 2` replaces `a`. The `.alias` and keyword forms add `a_times_2` and leave `a` as 1, 2, 3.
@@ -656,15 +691,17 @@ GroupBy methods keep the source column names. Rename afterward:
 
 ```python
 import polars as pl
+from datascience import make_array
 
 grouped = pl.DataFrame([
-    pl.Series("g", ["x", "x", "y"]),
-    pl.Series("a", [1, 2, 3]),
-    pl.Series("b", [10, 20, 30]),
+    pl.Series("g", make_array("x", "x", "y")),
+    pl.Series("a", make_array(1, 2, 3)),
+    pl.Series("b", make_array(10, 20, 30)),
 ])
 print(
-    grouped.group_by(pl.col("g"), maintain_order=True)
+    grouped.group_by(pl.col("g"))
     .sum()
+    .sort("g")
     .rename({"a": "total_a", "b": "total_b"})
 )
 ```
@@ -687,10 +724,11 @@ shape: (2, 3)
 
 ```python
 import polars as pl
+from datascience import make_array
 
 df = pl.DataFrame([
-    pl.Series("foo", [1, 2]),
-    pl.Series("bar", [3, 4]),
+    pl.Series("foo", make_array(1, 2)),
+    pl.Series("bar", make_array(3, 4)),
 ])
 print(df.with_columns((pl.col("foo") + pl.col("bar")).alias("baz")))
 ```
@@ -715,17 +753,18 @@ shape: (2, 3)
 
 ```python
 import polars as pl
+from datascience import make_array
 
 df = pl.DataFrame([
-    pl.Series("Flavor", ["strawberry", "chocolate", "chocolate"]),
-    pl.Series("Price", [3.55, 4.75, 5.25]),
+    pl.Series("Flavor", make_array("strawberry", "chocolate", "chocolate")),
+    pl.Series("Price", make_array(3.55, 4.75, 5.25)),
 ])
 
 print(df.get_column("Price"))
 print(df.get_column("Price").item(0))
 print(df.filter(pl.col("Price") > 4))
 print(df.with_columns((pl.col("Price") * 2).alias("double")))
-print(df.group_by(pl.col("Flavor"), maintain_order=True).len())
+print(df.group_by(pl.col("Flavor")).len().sort("Flavor"))
 print(df.filter(pl.col("Flavor") == "strawberry").get_column("Price").item(0))
 ```
 
@@ -765,23 +804,24 @@ shape: (2, 2)
 │ ---        ┆ --- │
 │ str        ┆ u32 │
 ╞════════════╪═════╡
-│ strawberry ┆ 1   │
 │ chocolate  ┆ 2   │
+│ strawberry ┆ 1   │
 └────────────┴─────┘
 3.55
 ```
 
-`get_column("Price")` is the Series. `.item(0)` is the first element, `3.55`. `filter(pl.col("Price") > 4)` keeps the two chocolate rows. `with_columns` adds `double`. `group_by(pl.col("Flavor"))` counts 1 strawberry and 2 chocolate. After a filter, `.get_column("Price").item(0)` is the strawberry price, `3.55`.
+`get_column("Price")` is the Series. `.item(0)` is the first element, `3.55`. `filter(pl.col("Price") > 4)` keeps the two chocolate rows. `with_columns` adds `double`. `group_by(pl.col("Flavor")).len().sort("Flavor")` counts 2 chocolate and 1 strawberry. After a filter, `.get_column("Price").item(0)` is the strawberry price, `3.55`.
 
 ### Example: `.select`
 
 ```python
 import polars as pl
+from datascience import make_array
 
 df = pl.DataFrame([
-    pl.Series("foo", [1, 2, 3]),
-    pl.Series("bar", [6, 7, 8]),
-    pl.Series("ham", ["a", "b", "c"]),
+    pl.Series("foo", make_array(1, 2, 3)),
+    pl.Series("bar", make_array(6, 7, 8)),
+    pl.Series("ham", make_array("a", "b", "c")),
 ])
 
 out = df.select(
@@ -812,11 +852,12 @@ shape: (3, 4)
 
 ```python
 import polars as pl
+from datascience import make_array
 
 cones = pl.DataFrame([
-    pl.Series("Flavor", ["strawberry", "chocolate", "chocolate", "strawberry", "chocolate", "bubblegum"]),
-    pl.Series("Color", ["pink", "light brown", "dark brown", "pink", "dark brown", "pink"]),
-    pl.Series("Price", [3.55, 4.75, 5.25, 5.25, 5.25, 4.75]),
+    pl.Series("Flavor", make_array("strawberry", "chocolate", "chocolate", "strawberry", "chocolate", "bubblegum")),
+    pl.Series("Color", make_array("pink", "light brown", "dark brown", "pink", "dark brown", "pink")),
+    pl.Series("Price", make_array(3.55, 4.75, 5.25, 5.25, 5.25, 4.75)),
 ])
 
 print(cones.filter(pl.col("Price") > 5))
@@ -832,10 +873,11 @@ cones.lazy().filter(pl.col("Price") > 5).select(pl.col("Flavor"), pl.col("Price"
 
 ```python
 import polars as pl
+from datascience import make_array
 
 df = pl.DataFrame([
-    pl.Series("old_label", [1, 2, 3]),
-    pl.Series("x", [4, 5, 6]),
+    pl.Series("old_label", make_array(1, 2, 3)),
+    pl.Series("x", make_array(4, 5, 6)),
 ])
 
 df2 = df.rename({"old_label": "new_label"})
@@ -854,51 +896,55 @@ These calls are the conversion notebook, plus `.len()` for Data 8's default coun
 
 ```python
 import polars as pl
+from datascience import make_array
 
 cones = pl.DataFrame([
-    pl.Series("Flavor", ["strawberry", "chocolate", "chocolate", "strawberry", "chocolate", "bubblegum"]),
-    pl.Series("Color", ["pink", "light brown", "dark brown", "pink", "dark brown", "pink"]),
-    pl.Series("Price", [3.55, 4.75, 5.25, 5.25, 5.25, 4.75]),
+    pl.Series("Flavor", make_array("strawberry", "chocolate", "chocolate", "strawberry", "chocolate", "bubblegum")),
+    pl.Series("Color", make_array("pink", "light brown", "dark brown", "pink", "dark brown", "pink")),
+    pl.Series("Price", make_array(3.55, 4.75, 5.25, 5.25, 5.25, 4.75)),
 ])
 
-print(cones.group_by(pl.col("Flavor"), maintain_order=True).max())
-print(cones.select("Flavor", "Price").group_by(pl.col("Flavor"), maintain_order=True).sum())
-print(cones.group_by(pl.col("Flavor"), maintain_order=True).len())
-print(cones.group_by(pl.col("Flavor"), maintain_order=True).having(pl.len() > 1).len())
+print(cones.group_by(pl.col("Flavor")).max().sort("Flavor"))
+print(cones.select("Flavor", "Price").group_by(pl.col("Flavor")).sum().sort("Flavor"))
+print(cones.group_by(pl.col("Flavor")).len().sort("Flavor"))
+print(cones.group_by(pl.col("Flavor")).having(pl.len() > 1).len().sort("Flavor"))
 
 print(cones.pivot("Flavor", index="Color", values="Price", aggregate_function="max"))
 ```
 
-`.max()` keeps `Color` (string maximum) and `Price`. `.sum()` is called only after `select("Flavor", "Price")`. `.having(pl.len() > 1).len()` keeps flavors that appear more than once. `maintain_order=True` lists strawberry, then chocolate, then bubblegum.
+`.max()` keeps `Color` (string maximum) and `Price`. `.sum()` is called only after `select("Flavor", "Price")`. `.having(pl.len() > 1).len()` keeps flavors that appear more than once. `.sort("Flavor")` lists bubblegum, then chocolate, then strawberry, as Data 8 does.
 
-`.max()` on `Price` is 5.25, 5.25, and 4.75. `.sum()` on `Price` is 8.8, 15.25, and 4.75. `.len()` is 2, 3, and 1. The pivot's `dark brown` / `chocolate` cell is 5.25.
+`.max()` on `Price` is 4.75, 5.25, and 5.25. `.sum()` on `Price` is 4.75, 15.25, and 8.8. `.len()` is 1, 3, and 2. The pivot's `dark brown` / `chocolate` cell is 5.25.
 
 A custom Python function uses `map_groups`, with the group key passed as a column name:
 
 ```python
-cones.select("Flavor", "Price").group_by("Flavor", maintain_order=True).map_groups(
+cones.select("Flavor", "Price").group_by("Flavor").map_groups(
     lambda g: g.select(pl.col("Flavor").first(), pl.col("Price").max())
-)
+).sort("Flavor")
 ```
 
 Several numeric columns can be summed together, then renamed:
 
 ```python
 import polars as pl
+from datascience import make_array
 
 movies = pl.DataFrame([
-    pl.Series("genre", ["Comedy", "Comedy", "Drama", "Drama", "Comedy"]),
-    pl.Series("score", [72, 65, 88, 91, 70]),
-    pl.Series("gross", [100.0, 85.0, 120.0, 150.0, 95.0]),
+    pl.Series("genre", make_array("Comedy", "Comedy", "Drama", "Drama", "Comedy")),
+    pl.Series("score", make_array(72, 65, 88, 91, 70)),
+    pl.Series("gross", make_array(100.0, 85.0, 120.0, 150.0, 95.0)),
 ])
 print(
-    movies.group_by(pl.col("genre"), maintain_order=True)
+    movies.group_by(pl.col("genre"))
     .sum()
+    .sort("genre")
     .rename({"score": "total_score", "gross": "total_gross"})
 )
 print(
-    movies.group_by(pl.col("genre"), maintain_order=True)
+    movies.group_by(pl.col("genre"))
     .mean()
+    .sort("genre")
     .rename({"score": "avg_score", "gross": "avg_gross"})
 )
 ```
@@ -911,8 +957,9 @@ Sums: Comedy 207 and 280.0; Drama 179 and 270.0. Means: Comedy 69.0 and about 93
 
 ```python
 import polars as pl
+from datascience import make_array
 
-df = pl.DataFrame([pl.Series("a", [1, 3, 8, 8, 2, 1, 3])])
+df = pl.DataFrame([pl.Series("a", make_array(1, 3, 8, 8, 2, 1, 3))])
 
 print(df.select(pl.col("a").hist(bins=[1, 2, 3])))
 print(df.get_column("a").hist(bin_count=10))
@@ -920,7 +967,7 @@ print(df.get_column("a").hist(bin_count=10))
 print(
     df.with_columns(
         pl.col("a").bin_intervals([2, 4], labels=["low", "mid", "high"]).alias("bin")
-    ).group_by(pl.col("bin"), maintain_order=True).len()
+    ).group_by(pl.col("bin")).len().sort("bin")
 )
 ```
 
@@ -932,8 +979,9 @@ Use this when the calculation cannot be written with `pl.col` arithmetic. Doubli
 
 ```python
 import polars as pl
+from datascience import make_array
 
-df = pl.DataFrame([pl.Series("a", [1, 2, 3])])
+df = pl.DataFrame([pl.Series("a", make_array(1, 2, 3))])
 
 df2 = df.with_columns(
     pl.col("a").map_elements(lambda x: x * 2, return_dtype=int).alias("a_times_2")
@@ -950,20 +998,21 @@ Polars warns that `map_elements` is slower than `pl.col("a") * 2`. The column `a
 
 ```python
 import polars as pl
+from datascience import make_array
 
 tbl = pl.DataFrame([
-    pl.Series("a", [1, 2]),
-    pl.Series("b", ["x", "y"]),
+    pl.Series("a", make_array(1, 2)),
+    pl.Series("b", make_array("x", "y")),
 ])
 tbl.extend(pl.DataFrame([
-    pl.Series("a", [3]),
-    pl.Series("b", ["z"]),
+    pl.Series("a", make_array(3)),
+    pl.Series("b", make_array("z")),
 ]))
 print(tbl)
 
 tbl2 = pl.DataFrame([
-    pl.Series("a", [1, 2]),
-    pl.Series("b", [4, 5]),
+    pl.Series("a", make_array(1, 2)),
+    pl.Series("b", make_array(4, 5)),
 ])
 tbl2.extend(pl.from_dicts([
     {"a": 3, "b": 6},
@@ -980,9 +1029,10 @@ print(tbl2)
 
 ```python
 import numpy as np
+from datascience import make_array
 import polars as pl
 
-streets = pl.Series("Street", ["Bancroft", "Durant", "Channing", "Haste"])
+streets = pl.Series("Street", make_array("Bancroft", "Durant", "Channing", "Haste"))
 southside = pl.DataFrame([streets]).with_columns(
     pl.Series("Blocks from campus", np.arange(4))
 )
